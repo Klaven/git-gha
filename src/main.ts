@@ -4,6 +4,7 @@ import * as gitSourceProvider from './git-source-provider'
 import * as inputHelper from './input-helper'
 import * as path from 'path'
 import * as stateHelper from './state-helper'
+import * as settings from './git-source-settings'
 
 async function run(): Promise<void> {
   try {
@@ -17,8 +18,19 @@ async function run(): Promise<void> {
         path.join(__dirname, 'problem-matcher.json')
       )
 
-      // Get sources
-      await gitSourceProvider.getSource(sourceSettings)
+      if (sourceSettings.action == settings.Action.Checkout) {
+        // Get sources
+        await gitSourceProvider.getSource(sourceSettings)
+      } else if (sourceSettings.action == settings.Action.CommitPushPR) {
+        // commit, push and make PR (should probably make seperate actions)
+        await gitSourceProvider.commitSource(sourceSettings)
+        await gitSourceProvider.pushSource(sourceSettings)
+        await gitSourceProvider.pullRequestSource(sourceSettings)
+      } else {
+        // error
+      }
+
+      
     } finally {
       // Unregister problem matcher
       coreCommand.issueCommand('remove-matcher', {owner: 'checkout-git'}, '')

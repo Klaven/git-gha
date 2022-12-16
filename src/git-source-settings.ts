@@ -88,4 +88,35 @@ export interface IGitSourceSettings {
    * User override on the GitHub Server/Host URL that hosts the repository to be cloned
    */
   githubServerUrl: string | undefined
+
+  /**
+   * The action to complete
+   */
+  action: Action
+
+  /**
+   * The pr title
+   */
+
+  pullRequestTitle?: string
+
+  /**
+   * the pull request message
+   */
+  pullRequestMessage?: string
+
+  /**
+   * target branch for pull request
+   */
+  targetPullRequest?: string
+
+  /**
+   * the base branch for a pull request
+   */
+  basePullRequest?: string
+}
+
+export enum Action {
+  Checkout,
+  CommitPushPR
 }

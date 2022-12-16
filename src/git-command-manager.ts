@@ -6,7 +6,10 @@ import * as path from 'path'
 import * as refHelper from './ref-helper'
 import * as regexpHelper from './regexp-helper'
 import * as retryHelper from './retry-helper'
+import * as githubHelper from './github-api-helper'
+import {IGitSourceSettings} from './git-source-settings'
 import {GitVersion} from './git-version'
+import {Octokit} from './octokit-provider'
 
 // Auth header not supported before 2.9
 // Wire protocol v2 not supported before 2.18
@@ -47,6 +50,10 @@ export interface IGitCommandManager {
   tryDisableAutomaticGarbageCollection(): Promise<boolean>
   tryGetFetchUrl(): Promise<string>
   tryReset(): Promise<boolean>
+  tryAddAll(): Promise<string>
+  tryCommit(title: string, message: string): Promise<string>
+  tryPush(): Promise<string>
+  tryCreatePR(settings: IGitSourceSettings): Promise<string>
 }
 
 export async function createCommandManager(
@@ -497,6 +504,84 @@ class GitCommandManager {
     const gitHttpUserAgent = `git/${gitVersion} (github-actions-checkout)`
     core.debug(`Set git useragent to: ${gitHttpUserAgent}`)
     this.gitEnv['GIT_HTTP_USER_AGENT'] = gitHttpUserAgent
+  }
+
+  async tryAddAll(): Promise<string> {
+    const output = await this.execGit(
+      ['add', '*'],
+      true
+    )
+
+    if (output.exitCode !== 0) {
+      return ''
+    }
+
+    const stdout = output.stdout.trim()
+    if (stdout.includes('\n')) {
+      return ''
+    }
+
+    return stdout
+  }
+
+  async tryCommit(
+    title: string,
+    message: string
+  ): Promise<string> {
+    const output = await this.execGit(
+      ['config', '--local', '--get', 'remote.origin.url'],
+      true
+    )
+
+    if (output.exitCode !== 0) {
+      return ''
+    }
+
+    const stdout = output.stdout.trim()
+    if (stdout.includes('\n')) {
+      return ''
+    }
+
+    return stdout
+  }
+
+  async tryPush(): Promise<string> {
+    const output = await this.execGit(
+      ['push', '-u'],
+      true
+    )
+
+    if (output.exitCode !== 0) {
+      return ''
+    }
+
+    const stdout = output.stdout.trim()
+    if (stdout.includes('\n')) {
+      return ''
+    }
+
+    return stdout
+  }
+
+  async tryCreatePR(settings: IGitSourceSettings): Promise<string> {
+    if (settings.basePullRequest && settings.pullRequestMessage && settings.targetPullRequest && settings.pullRequestTitle) {
+      const params: Octokit.PullsCreateParams = {
+        base: settings.basePullRequest,
+        body: settings.pullRequestMessage,
+        draft: false,
+        head: settings.targetPullRequest,
+        maintainer_can_modify: true,
+        owner: settings.repositoryOwner,
+        repo: settings.repositoryPath,
+        title: settings.pullRequestTitle,
+      }
+      const ret = githubHelper.createPullRequest(
+        settings.authToken,
+        params,
+      )   
+    }  
+
+    return ""
   }
 }
 
