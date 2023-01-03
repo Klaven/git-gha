@@ -3,7 +3,7 @@ import * as fsHelper from './fs-helper'
 import * as github from '@actions/github'
 import * as path from 'path'
 import * as workflowContextHelper from './workflow-context-helper'
-import {IGitSourceSettings} from './git-source-settings'
+import {IGitSourceSettings,Action} from './git-source-settings'
 
 export async function getInputs(): Promise<IGitSourceSettings> {
   const result = ({} as unknown) as IGitSourceSettings
@@ -128,6 +128,10 @@ export async function getInputs(): Promise<IGitSourceSettings> {
 
   // Determine the GitHub URL that the repository is being hosted from
   result.githubServerUrl = core.getInput('github-server-url')
+
+  result.basePullRequest = core.getInput('base-pull-request')
+  result.targetPullRequest = core.getInput('target-pull-request')
+  result.action = Action[core.getInput('action')]
   core.debug(`GitHub Host URL = ${result.githubServerUrl}`)
 
   return result
