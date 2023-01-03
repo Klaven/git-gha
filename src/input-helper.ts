@@ -129,10 +129,15 @@ export async function getInputs(): Promise<IGitSourceSettings> {
   // Determine the GitHub URL that the repository is being hosted from
   result.githubServerUrl = core.getInput('github-server-url')
 
+
+  core.debug(`GitHub Host URL = ${result.githubServerUrl}`)
+
   result.basePullRequest = core.getInput('base-pull-request')
   result.targetPullRequest = core.getInput('target-pull-request')
+  result.pullRequestMessage = core.getInput('pull-request-message')
+  result.pullRequestTitle = core.getInput('pull-request-title')
   result.action = Action[core.getInput('action')]
-  core.debug(`GitHub Host URL = ${result.githubServerUrl}`)
+  core.debug(`Selected action = ${result.action}`)
 
   return result
 }
