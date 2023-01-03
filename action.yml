@@ -75,7 +75,7 @@ inputs:
     description: The base URL for the GitHub instance that you are trying to clone from, will use environment defaults to fetch from the same instance that the workflow is running from unless specified. Example URLs are https://github.com or https://my-ghes-server.example.com
     required: false
   action:
-    description: The action to preform, supported options are |Checkout|CommitPushPR|
+    description: The action to preform, supported options are |Checkout|PR|
     required: false
     default: Checkout
   base-pull-request:

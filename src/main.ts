@@ -24,7 +24,7 @@ async function run(): Promise<void> {
         // Get sources
         core.info("Running checkout command")
         await gitSourceProvider.getSource(sourceSettings)
-      } else if (sourceSettings.action == settings.Action.CommitPushPR) {
+      } else if (sourceSettings.action == settings.Action.PR) {
         // commit, push and make PR (should probably make seperate actions)
         core.info("Running PR command")
         core.startGroup("Createing PR")

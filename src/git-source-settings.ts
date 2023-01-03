@@ -117,6 +117,6 @@ export interface IGitSourceSettings {
 }
 
 export enum Action {
-  Checkout,
-  CommitPushPR
+  Checkout = "Checkout",
+  PR = "PR"
 }
