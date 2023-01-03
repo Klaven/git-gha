@@ -87,7 +87,7 @@ inputs:
   pull-request-message:
     description: The pull request message to use
     required: false
-  pull-request-tital:
+  pull-request-title:
     description: The pull request title
     required: false
   tag:
