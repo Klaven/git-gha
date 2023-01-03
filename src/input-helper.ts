@@ -137,7 +137,7 @@ export async function getInputs(): Promise<IGitSourceSettings> {
   result.pullRequestMessage = core.getInput('pull-request-message')
   result.pullRequestTitle = core.getInput('pull-request-title')
   result.action = Action[core.getInput('action')]
-  core.debug(`Selected action = ${result.action}`)
+  core.info(`Selected action = ${result.action}`)
 
   return result
 }
