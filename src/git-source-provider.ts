@@ -24,7 +24,7 @@ export async function pushSource(settings: IGitSourceSettings): Promise<void> {
 
 export async function pullRequestSource(settings: IGitSourceSettings): Promise<void> {
   const git = await getGitCommandManager(settings)
-  git?.tryCreatePR(settings, "test", "test", "base", "target")
+  git?.tryCreatePR(settings)
 }
 
 export async function getSource(settings: IGitSourceSettings): Promise<void> {
