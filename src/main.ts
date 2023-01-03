@@ -9,8 +9,9 @@ import * as settings from './git-source-settings'
 async function run(): Promise<void> {
   core.debug("Starting action")
   try {
+    core.startGroup("Getting inputs")
     const sourceSettings = await inputHelper.getInputs()
-
+    core.endGroup()
     try {
       // Register problem matcher
       coreCommand.issueCommand(
@@ -21,11 +22,11 @@ async function run(): Promise<void> {
 
       if (sourceSettings.action == settings.Action.Checkout) {
         // Get sources
-        core.debug("Running checkout")
+        core.info("Running checkout command")
         await gitSourceProvider.getSource(sourceSettings)
       } else if (sourceSettings.action == settings.Action.CommitPushPR) {
         // commit, push and make PR (should probably make seperate actions)
-        core.debug("Creating PR")
+        core.info("Running PR command")
         core.startGroup("Createing PR")
         await gitSourceProvider.commitSource(sourceSettings)
         await gitSourceProvider.pushSource(sourceSettings)
