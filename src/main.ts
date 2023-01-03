@@ -7,6 +7,7 @@ import * as stateHelper from './state-helper'
 import * as settings from './git-source-settings'
 
 async function run(): Promise<void> {
+  core.debug("Starting action")
   try {
     const sourceSettings = await inputHelper.getInputs()
 
@@ -20,12 +21,16 @@ async function run(): Promise<void> {
 
       if (sourceSettings.action == settings.Action.Checkout) {
         // Get sources
+        core.debug("Running checkout")
         await gitSourceProvider.getSource(sourceSettings)
       } else if (sourceSettings.action == settings.Action.CommitPushPR) {
         // commit, push and make PR (should probably make seperate actions)
+        core.debug("Creating PR")
+        core.startGroup("Createing PR")
         await gitSourceProvider.commitSource(sourceSettings)
         await gitSourceProvider.pushSource(sourceSettings)
         await gitSourceProvider.pullRequestSource(sourceSettings)
+        core.endGroup()
       } else {
         // error
       }
