@@ -94,7 +94,9 @@ export function secondsSinceEpoch(): number {
 }
 
 export function randomString(): string {
-  return Math.random().toString(36).substr(2, 7)
+  return Math.random()
+    .toString(36)
+    .substr(2, 7)
 }
 
 interface DisplayNameEmail {

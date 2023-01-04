@@ -12,9 +12,11 @@ import * as urlHelper from './url-helper'
 import {IGitCommandManager} from './git-command-manager'
 import {IGitSourceSettings} from './git-source-settings'
 
-export async function commitSource(settings: IGitSourceSettings): Promise<void> {
+export async function commitSource(
+  settings: IGitSourceSettings
+): Promise<void> {
   const git = await getGitCommandManager(settings)
-  git?.tryCommit("test","test")
+  git?.tryCommit('test', 'test')
 }
 
 export async function pushSource(settings: IGitSourceSettings): Promise<void> {
@@ -22,7 +24,9 @@ export async function pushSource(settings: IGitSourceSettings): Promise<void> {
   git?.tryPush()
 }
 
-export async function pullRequestSource(settings: IGitSourceSettings): Promise<void> {
+export async function pullRequestSource(
+  settings: IGitSourceSettings
+): Promise<void> {
   const git = await getGitCommandManager(settings)
   git?.tryCreatePR(settings)
 }

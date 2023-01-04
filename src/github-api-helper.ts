@@ -149,37 +149,39 @@ async function downloadArchive(
 export async function createPullRequest(
   authToken: string,
   createParams: Octokit.PullsCreateParams,
-  baseUrl?: string,
+  baseUrl?: string
 ): Promise<Pull> {
-  return await retryHelper.execute(async (): Promise<Pull> => {
-    try {
-      core.info(`Attempting creation of pull request`)
-      const octokit = getOctokit(authToken, {baseUrl: baseUrl})
+  return await retryHelper.execute(
+    async (): Promise<Pull> => {
+      try {
+        core.info(`Attempting creation of pull request`)
+        const octokit = getOctokit(authToken, {baseUrl: baseUrl})
 
-      const {data: pull} = await octokit.pulls.create(createParams)
-      core.info(
-        `Created pull request #${pull.number} (${createParams.head} => ${createParams.base})`
-      )
+        const {data: pull} = await octokit.pulls.create(createParams)
+        core.info(
+          `Created pull request #${pull.number} (${createParams.head} => ${createParams.base})`
+        )
+        return {
+          number: pull.number,
+          html_url: pull.html_url,
+          created: true
+        }
+      } catch (e) {
+        if (
+          utils.getErrorMessage(e).includes(`A pull request already exists for`)
+        ) {
+          core.info(`A pull request already exists for ${createParams.head}`)
+        } else {
+          throw e
+        }
+      }
       return {
-        number: pull.number,
-        html_url: pull.html_url,
-        created: true
-      }
-    } catch (e) {
-      if (
-        utils.getErrorMessage(e).includes(`A pull request already exists for`)
-      ) {
-        core.info(`A pull request already exists for ${createParams.head}`)
-      } else {
-        throw e
+        number: 0,
+        html_url: '',
+        created: false
       }
     }
-    return         {
-      number: 0,
-      html_url: "",
-      created: false
-    }
-  })
+  )
 }
 
 interface Pull {

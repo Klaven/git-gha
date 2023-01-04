@@ -117,6 +117,6 @@ export interface IGitSourceSettings {
 }
 
 export enum Action {
-  Checkout = "Checkout",
-  PR = "PR"
+  Checkout = 'Checkout',
+  PR = 'PR'
 }

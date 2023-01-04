@@ -101,6 +101,25 @@ When Git 2.18 or higher is not in your PATH, falls back to the REST API to downl
     # running from unless specified. Example URLs are https://github.com or
     # https://my-ghes-server.example.com
     github-server-url: ''
+
+    # The action to preform, supported options are |Checkout|PR|
+    # Default: Checkout
+    action: ''
+
+    # The base branch to use for the pull request
+    base-pull-request: ''
+
+    # The target branch to use for the pull request
+    target-pull-request: ''
+
+    # The pull request message to use
+    pull-request-message: ''
+
+    # The pull request title
+    pull-request-title: ''
+
+    # The tag to use
+    tag: ''
 ```
 <!-- end usage -->
 
