@@ -4648,16 +4648,35 @@ const gitSourceProvider = __importStar(__webpack_require__(853));
 const inputHelper = __importStar(__webpack_require__(821));
 const path = __importStar(__webpack_require__(622));
 const stateHelper = __importStar(__webpack_require__(153));
+const settings = __importStar(__webpack_require__(873));
 function run() {
     var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
+        core.debug('Starting action');
         try {
+            core.startGroup('Getting inputs');
             const sourceSettings = yield inputHelper.getInputs();
+            core.endGroup();
             try {
                 // Register problem matcher
                 coreCommand.issueCommand('add-matcher', {}, path.join(__dirname, 'problem-matcher.json'));
-                // Get sources
-                yield gitSourceProvider.getSource(sourceSettings);
+                if (sourceSettings.action == settings.Action.Checkout) {
+                    // Get sources
+                    core.info('Running checkout command');
+                    yield gitSourceProvider.getSource(sourceSettings);
+                }
+                else if (sourceSettings.action == settings.Action.PR) {
+                    // commit, push and make PR (should probably make seperate actions)
+                    core.info('Running PR command');
+                    core.startGroup('Createing PR');
+                    yield gitSourceProvider.commitSource(sourceSettings);
+                    yield gitSourceProvider.pushSource(sourceSettings);
+                    yield gitSourceProvider.pullRequestSource(sourceSettings);
+                    core.endGroup();
+                }
+                else {
+                    // error
+                }
             }
             finally {
                 // Unregister problem matcher
@@ -5030,6 +5049,86 @@ function select(obj, path) {
     const key = path.substr(0, i);
     return select(obj[key], path.substr(i + 1));
 }
+
+
+/***/ }),
+
+/***/ 241:
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.GitVersion = void 0;
+class GitVersion {
+    /**
+     * Used for comparing the version of git and git-lfs against the minimum required version
+     * @param version the version string, e.g. 1.2 or 1.2.3
+     */
+    constructor(version) {
+        this.major = NaN;
+        this.minor = NaN;
+        this.patch = NaN;
+        if (version) {
+            const match = version.match(/^(\d+)\.(\d+)(\.(\d+))?$/);
+            if (match) {
+                this.major = Number(match[1]);
+                this.minor = Number(match[2]);
+                if (match[4]) {
+                    this.patch = Number(match[4]);
+                }
+            }
+        }
+    }
+    /**
+     * Compares the instance against a minimum required version
+     * @param minimum Minimum version
+     */
+    checkMinimum(minimum) {
+        if (!minimum.isValid()) {
+            throw new Error('Arg minimum is not a valid version');
+        }
+        // Major is insufficient
+        if (this.major < minimum.major) {
+            return false;
+        }
+        // Major is equal
+        if (this.major === minimum.major) {
+            // Minor is insufficient
+            if (this.minor < minimum.minor) {
+                return false;
+            }
+            // Minor is equal
+            if (this.minor === minimum.minor) {
+                // Patch is insufficient
+                if (this.patch && this.patch < (minimum.patch || 0)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+    /**
+     * Indicates whether the instance was constructed from a valid version string
+     */
+    isValid() {
+        return !isNaN(this.major);
+    }
+    /**
+     * Returns the version as a string, e.g. 1.2 or 1.2.3
+     */
+    toString() {
+        let result = '';
+        if (this.isValid()) {
+            result = `${this.major}.${this.minor}`;
+            if (!isNaN(this.patch)) {
+                result += `.${this.patch}`;
+            }
+        }
+        return result;
+    }
+}
+exports.GitVersion = GitVersion;
 
 
 /***/ }),
@@ -5500,27 +5599,6 @@ function applyAcceptHeader (res, headers) {
 
   return headers
 }
-
-
-/***/ }),
-
-/***/ 277:
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-"use strict";
-
-
-var origSymbol = typeof Symbol !== 'undefined' && Symbol;
-var hasSymbolSham = __webpack_require__(923);
-
-module.exports = function hasNativeSymbols() {
-	if (typeof origSymbol !== 'function') { return false; }
-	if (typeof Symbol !== 'function') { return false; }
-	if (typeof origSymbol('foo') !== 'symbol') { return false; }
-	if (typeof Symbol('bar') !== 'symbol') { return false; }
-
-	return hasSymbolSham();
-};
 
 
 /***/ }),
@@ -7394,7 +7472,8 @@ const path = __importStar(__webpack_require__(622));
 const refHelper = __importStar(__webpack_require__(227));
 const regexpHelper = __importStar(__webpack_require__(528));
 const retryHelper = __importStar(__webpack_require__(587));
-const git_version_1 = __webpack_require__(559);
+const githubHelper = __importStar(__webpack_require__(464));
+const git_version_1 = __webpack_require__(241);
 // Auth header not supported before 2.9
 // Wire protocol v2 not supported before 2.18
 exports.MinimumGitVersion = new git_version_1.GitVersion('2.18');
@@ -7796,6 +7875,66 @@ class GitCommandManager {
             const gitHttpUserAgent = `git/${gitVersion} (github-actions-checkout)`;
             core.debug(`Set git useragent to: ${gitHttpUserAgent}`);
             this.gitEnv['GIT_HTTP_USER_AGENT'] = gitHttpUserAgent;
+        });
+    }
+    tryAddAll() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const output = yield this.execGit(['add', '*'], true);
+            if (output.exitCode !== 0) {
+                return '';
+            }
+            const stdout = output.stdout.trim();
+            if (stdout.includes('\n')) {
+                return '';
+            }
+            return stdout;
+        });
+    }
+    tryCommit(title, message) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const output = yield this.execGit(['config', '--local', '--get', 'remote.origin.url'], true);
+            if (output.exitCode !== 0) {
+                return '';
+            }
+            const stdout = output.stdout.trim();
+            if (stdout.includes('\n')) {
+                return '';
+            }
+            return stdout;
+        });
+    }
+    tryPush() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const output = yield this.execGit(['push', '-u'], true);
+            if (output.exitCode !== 0) {
+                return '';
+            }
+            const stdout = output.stdout.trim();
+            if (stdout.includes('\n')) {
+                return '';
+            }
+            return stdout;
+        });
+    }
+    tryCreatePR(settings) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (settings.basePullRequest &&
+                settings.pullRequestMessage &&
+                settings.targetPullRequest &&
+                settings.pullRequestTitle) {
+                const params = {
+                    base: settings.basePullRequest,
+                    body: settings.pullRequestMessage,
+                    draft: false,
+                    head: settings.targetPullRequest,
+                    maintainer_can_modify: true,
+                    owner: settings.repositoryOwner,
+                    repo: settings.repositoryPath,
+                    title: settings.pullRequestTitle
+                };
+                const ret = githubHelper.createPullRequest(settings.authToken, params);
+            }
+            return '';
         });
     }
 }
@@ -11389,7 +11528,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDefaultBranch = exports.downloadRepository = void 0;
+exports.createPullRequest = exports.getDefaultBranch = exports.downloadRepository = void 0;
 const assert = __importStar(__webpack_require__(357));
 const core = __importStar(__webpack_require__(470));
 const fs = __importStar(__webpack_require__(747));
@@ -11397,6 +11536,7 @@ const io = __importStar(__webpack_require__(1));
 const path = __importStar(__webpack_require__(622));
 const retryHelper = __importStar(__webpack_require__(587));
 const toolCache = __importStar(__webpack_require__(533));
+const utils = __importStar(__webpack_require__(611));
 const v4_1 = __importDefault(__webpack_require__(826));
 const octokit_provider_1 = __webpack_require__(195);
 const IS_WINDOWS = process.platform === 'win32';
@@ -11505,6 +11645,40 @@ function downloadArchive(authToken, owner, repo, ref, commit, baseUrl) {
         return Buffer.from(response.data); // response.data is ArrayBuffer
     });
 }
+/**
+ * creates a pull request
+ */
+function createPullRequest(authToken, createParams, baseUrl) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return yield retryHelper.execute(() => __awaiter(this, void 0, void 0, function* () {
+            try {
+                core.info(`Attempting creation of pull request`);
+                const octokit = (0, octokit_provider_1.getOctokit)(authToken, { baseUrl: baseUrl });
+                const { data: pull } = yield octokit.pulls.create(createParams);
+                core.info(`Created pull request #${pull.number} (${createParams.head} => ${createParams.base})`);
+                return {
+                    number: pull.number,
+                    html_url: pull.html_url,
+                    created: true
+                };
+            }
+            catch (e) {
+                if (utils.getErrorMessage(e).includes(`A pull request already exists for`)) {
+                    core.info(`A pull request already exists for ${createParams.head}`);
+                }
+                else {
+                    throw e;
+                }
+            }
+            return {
+                number: 0,
+                html_url: '',
+                created: false
+            };
+        }));
+    });
+}
+exports.createPullRequest = createPullRequest;
 
 
 /***/ }),
@@ -13398,81 +13572,22 @@ function hasPreviousPage (link) {
 /***/ }),
 
 /***/ 559:
-/***/ (function(__unusedmodule, exports) {
+/***/ (function(module, __unusedexports, __webpack_require__) {
 
 "use strict";
 
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.GitVersion = void 0;
-class GitVersion {
-    /**
-     * Used for comparing the version of git and git-lfs against the minimum required version
-     * @param version the version string, e.g. 1.2 or 1.2.3
-     */
-    constructor(version) {
-        this.major = NaN;
-        this.minor = NaN;
-        this.patch = NaN;
-        if (version) {
-            const match = version.match(/^(\d+)\.(\d+)(\.(\d+))?$/);
-            if (match) {
-                this.major = Number(match[1]);
-                this.minor = Number(match[2]);
-                if (match[4]) {
-                    this.patch = Number(match[4]);
-                }
-            }
-        }
-    }
-    /**
-     * Compares the instance against a minimum required version
-     * @param minimum Minimum version
-     */
-    checkMinimum(minimum) {
-        if (!minimum.isValid()) {
-            throw new Error('Arg minimum is not a valid version');
-        }
-        // Major is insufficient
-        if (this.major < minimum.major) {
-            return false;
-        }
-        // Major is equal
-        if (this.major === minimum.major) {
-            // Minor is insufficient
-            if (this.minor < minimum.minor) {
-                return false;
-            }
-            // Minor is equal
-            if (this.minor === minimum.minor) {
-                // Patch is insufficient
-                if (this.patch && this.patch < (minimum.patch || 0)) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-    /**
-     * Indicates whether the instance was constructed from a valid version string
-     */
-    isValid() {
-        return !isNaN(this.major);
-    }
-    /**
-     * Returns the version as a string, e.g. 1.2 or 1.2.3
-     */
-    toString() {
-        let result = '';
-        if (this.isValid()) {
-            result = `${this.major}.${this.minor}`;
-            if (!isNaN(this.patch)) {
-                result += `.${this.patch}`;
-            }
-        }
-        return result;
-    }
-}
-exports.GitVersion = GitVersion;
+
+var origSymbol = typeof Symbol !== 'undefined' && Symbol;
+var hasSymbolSham = __webpack_require__(923);
+
+module.exports = function hasNativeSymbols() {
+	if (typeof origSymbol !== 'function') { return false; }
+	if (typeof Symbol !== 'function') { return false; }
+	if (typeof origSymbol('foo') !== 'symbol') { return false; }
+	if (typeof Symbol('bar') !== 'symbol') { return false; }
+
+	return hasSymbolSham();
+};
 
 
 /***/ }),
@@ -14119,6 +14234,162 @@ exports.execute = execute;
 /***/ (function(module) {
 
 module.exports = require("http");
+
+/***/ }),
+
+/***/ 611:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getErrorMessage = exports.fileExistsSync = exports.parseDisplayNameEmail = exports.randomString = exports.secondsSinceEpoch = exports.getRemoteUrl = exports.getRemoteDetail = exports.getRepoPath = exports.getStringAsArray = exports.getInputAsArray = void 0;
+const core = __importStar(__webpack_require__(470));
+const fs = __importStar(__webpack_require__(747));
+const path = __importStar(__webpack_require__(622));
+function getInputAsArray(name, options) {
+    return getStringAsArray(core.getInput(name, options));
+}
+exports.getInputAsArray = getInputAsArray;
+function getStringAsArray(str) {
+    return str
+        .split(/[\n,]+/)
+        .map(s => s.trim())
+        .filter(x => x !== '');
+}
+exports.getStringAsArray = getStringAsArray;
+function getRepoPath(relativePath) {
+    let githubWorkspacePath = process.env['GITHUB_WORKSPACE'];
+    if (!githubWorkspacePath) {
+        throw new Error('GITHUB_WORKSPACE not defined');
+    }
+    githubWorkspacePath = path.resolve(githubWorkspacePath);
+    core.debug(`githubWorkspacePath: ${githubWorkspacePath}`);
+    let repoPath = githubWorkspacePath;
+    if (relativePath)
+        repoPath = path.resolve(repoPath, relativePath);
+    core.debug(`repoPath: ${repoPath}`);
+    return repoPath;
+}
+exports.getRepoPath = getRepoPath;
+function getRemoteDetail(remoteUrl) {
+    // Parse the protocol and github repository from a URL
+    // e.g. HTTPS, peter-evans/create-pull-request
+    const githubUrl = process.env['GITHUB_SERVER_URL'] || 'https://github.com';
+    const githubServerMatch = githubUrl.match(/^https?:\/\/(.+)$/i);
+    if (!githubServerMatch) {
+        throw new Error('Could not parse GitHub Server name');
+    }
+    const hostname = githubServerMatch[1];
+    const httpsUrlPattern = new RegExp('^https?://.*@?' + hostname + '/(.+/.+?)(\\.git)?$', 'i');
+    const sshUrlPattern = new RegExp('^git@' + hostname + ':(.+/.+)\\.git$', 'i');
+    const httpsMatch = remoteUrl.match(httpsUrlPattern);
+    if (httpsMatch) {
+        return {
+            hostname,
+            protocol: 'HTTPS',
+            repository: httpsMatch[1]
+        };
+    }
+    const sshMatch = remoteUrl.match(sshUrlPattern);
+    if (sshMatch) {
+        return {
+            hostname,
+            protocol: 'SSH',
+            repository: sshMatch[1]
+        };
+    }
+    throw new Error(`The format of '${remoteUrl}' is not a valid GitHub repository URL`);
+}
+exports.getRemoteDetail = getRemoteDetail;
+function getRemoteUrl(protocol, hostname, repository) {
+    return protocol == 'HTTPS'
+        ? `https://${hostname}/${repository}`
+        : `git@${hostname}:${repository}.git`;
+}
+exports.getRemoteUrl = getRemoteUrl;
+function secondsSinceEpoch() {
+    const now = new Date();
+    return Math.round(now.getTime() / 1000);
+}
+exports.secondsSinceEpoch = secondsSinceEpoch;
+function randomString() {
+    return Math.random()
+        .toString(36)
+        .substr(2, 7);
+}
+exports.randomString = randomString;
+function parseDisplayNameEmail(displayNameEmail) {
+    // Parse the name and email address from a string in the following format
+    // Display Name <email@address.com>
+    const pattern = /^([^<]+)\s*<([^>]+)>$/i;
+    // Check we have a match
+    const match = displayNameEmail.match(pattern);
+    if (!match) {
+        throw new Error(`The format of '${displayNameEmail}' is not a valid email address with display name`);
+    }
+    // Check that name and email are not just whitespace
+    const name = match[1].trim();
+    const email = match[2].trim();
+    if (!name || !email) {
+        throw new Error(`The format of '${displayNameEmail}' is not a valid email address with display name`);
+    }
+    return {
+        name: name,
+        email: email
+    };
+}
+exports.parseDisplayNameEmail = parseDisplayNameEmail;
+function fileExistsSync(path) {
+    if (!path) {
+        throw new Error("Arg 'path' must not be empty");
+    }
+    let stats;
+    try {
+        stats = fs.statSync(path);
+    }
+    catch (error) {
+        if (hasErrorCode(error) && error.code === 'ENOENT') {
+            return false;
+        }
+        throw new Error(`Encountered an error when checking whether path '${path}' exists: ${getErrorMessage(error)}`);
+    }
+    if (!stats.isDirectory()) {
+        return true;
+    }
+    return false;
+}
+exports.fileExistsSync = fileExistsSync;
+/* eslint-disable  @typescript-eslint/no-explicit-any */
+function hasErrorCode(error) {
+    return typeof (error && error.code) === 'string';
+}
+function getErrorMessage(error) {
+    if (error instanceof Error)
+        return error.message;
+    return String(error);
+}
+exports.getErrorMessage = getErrorMessage;
+
 
 /***/ }),
 
@@ -18429,6 +18700,7 @@ const fsHelper = __importStar(__webpack_require__(618));
 const github = __importStar(__webpack_require__(469));
 const path = __importStar(__webpack_require__(622));
 const workflowContextHelper = __importStar(__webpack_require__(642));
+const git_source_settings_1 = __webpack_require__(873);
 function getInputs() {
     return __awaiter(this, void 0, void 0, function* () {
         const result = {};
@@ -18524,6 +18796,12 @@ function getInputs() {
         // Determine the GitHub URL that the repository is being hosted from
         result.githubServerUrl = core.getInput('github-server-url');
         core.debug(`GitHub Host URL = ${result.githubServerUrl}`);
+        result.basePullRequest = core.getInput('base-pull-request');
+        result.targetPullRequest = core.getInput('target-pull-request');
+        result.pullRequestMessage = core.getInput('pull-request-message');
+        result.pullRequestTitle = core.getInput('pull-request-title');
+        result.action = git_source_settings_1.Action[core.getInput('action')];
+        core.debug(`Selected action = ${result.action}`);
         return result;
     });
 }
@@ -31832,7 +32110,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cleanup = exports.getSource = void 0;
+exports.cleanup = exports.getSource = exports.pullRequestSource = exports.pushSource = exports.commitSource = void 0;
 const core = __importStar(__webpack_require__(470));
 const fsHelper = __importStar(__webpack_require__(618));
 const gitAuthHelper = __importStar(__webpack_require__(287));
@@ -31844,6 +32122,27 @@ const path = __importStar(__webpack_require__(622));
 const refHelper = __importStar(__webpack_require__(227));
 const stateHelper = __importStar(__webpack_require__(153));
 const urlHelper = __importStar(__webpack_require__(81));
+function commitSource(settings) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const git = yield getGitCommandManager(settings);
+        git === null || git === void 0 ? void 0 : git.tryCommit('test', 'test');
+    });
+}
+exports.commitSource = commitSource;
+function pushSource(settings) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const git = yield getGitCommandManager(settings);
+        git === null || git === void 0 ? void 0 : git.tryPush();
+    });
+}
+exports.pushSource = pushSource;
+function pullRequestSource(settings) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const git = yield getGitCommandManager(settings);
+        git === null || git === void 0 ? void 0 : git.tryCreatePR(settings);
+    });
+}
+exports.pullRequestSource = pullRequestSource;
 function getSource(settings) {
     return __awaiter(this, void 0, void 0, function* () {
         // Repository URL
@@ -33102,6 +33401,22 @@ module.exports = function (str) {
 		bin + (arg ? ' ' + arg : '')
 	);
 };
+
+
+/***/ }),
+
+/***/ 873:
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Action = void 0;
+var Action;
+(function (Action) {
+    Action["Checkout"] = "Checkout";
+    Action["PR"] = "PR";
+})(Action = exports.Action || (exports.Action = {}));
 
 
 /***/ }),
@@ -35118,7 +35433,7 @@ var ThrowTypeError = $gOPD
 	}())
 	: throwTypeError;
 
-var hasSymbols = __webpack_require__(277)();
+var hasSymbols = __webpack_require__(559)();
 
 var getProto = Object.getPrototypeOf || function (x) { return x.__proto__; }; // eslint-disable-line no-proto
 

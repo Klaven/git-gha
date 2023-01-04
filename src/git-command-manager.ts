@@ -507,10 +507,7 @@ class GitCommandManager {
   }
 
   async tryAddAll(): Promise<string> {
-    const output = await this.execGit(
-      ['add', '*'],
-      true
-    )
+    const output = await this.execGit(['add', '*'], true)
 
     if (output.exitCode !== 0) {
       return ''
@@ -524,10 +521,7 @@ class GitCommandManager {
     return stdout
   }
 
-  async tryCommit(
-    title: string,
-    message: string
-  ): Promise<string> {
+  async tryCommit(title: string, message: string): Promise<string> {
     const output = await this.execGit(
       ['config', '--local', '--get', 'remote.origin.url'],
       true
@@ -546,10 +540,7 @@ class GitCommandManager {
   }
 
   async tryPush(): Promise<string> {
-    const output = await this.execGit(
-      ['push', '-u'],
-      true
-    )
+    const output = await this.execGit(['push', '-u'], true)
 
     if (output.exitCode !== 0) {
       return ''
@@ -564,7 +555,12 @@ class GitCommandManager {
   }
 
   async tryCreatePR(settings: IGitSourceSettings): Promise<string> {
-    if (settings.basePullRequest && settings.pullRequestMessage && settings.targetPullRequest && settings.pullRequestTitle) {
+    if (
+      settings.basePullRequest &&
+      settings.pullRequestMessage &&
+      settings.targetPullRequest &&
+      settings.pullRequestTitle
+    ) {
       const params: Octokit.PullsCreateParams = {
         base: settings.basePullRequest,
         body: settings.pullRequestMessage,
@@ -573,15 +569,12 @@ class GitCommandManager {
         maintainer_can_modify: true,
         owner: settings.repositoryOwner,
         repo: settings.repositoryPath,
-        title: settings.pullRequestTitle,
+        title: settings.pullRequestTitle
       }
-      const ret = githubHelper.createPullRequest(
-        settings.authToken,
-        params,
-      )   
-    }  
+      const ret = githubHelper.createPullRequest(settings.authToken, params)
+    }
 
-    return ""
+    return ''
   }
 }
 
